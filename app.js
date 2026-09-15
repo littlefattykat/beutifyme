@@ -1,16 +1,30 @@
 /* ============================================================
-   Vitalis Health — Apple Health style tracker
-   Pure vanilla JS. All data stored locally (localStorage).
+   BeautifyMe — Apple Health style calorie, activity & weight tracker
+   Vanilla JS. All data stored locally (localStorage).
    ============================================================ */
 (function () {
   'use strict';
 
-  const KEY = 'vitalis.v1';
-  const KCAL_PER_KG = 7700;      // energy deficit per kg of body mass
+  const KEY = 'beautifyme.v1';
+  const LEGACY_KEY = 'vitalis.v1';
+  const KCAL_PER_KG = 7700;
   const $ = (id) => document.getElementById(id);
-  const todayKey = () => new Date().toISOString().slice(0, 10);
   const num = (v, d = 0) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
   const round = (n, p = 0) => { const f = Math.pow(10, p); return Math.round(n * f) / f; };
+
+  const dateKey = (d) => {
+    const x = new Date(d);
+    return new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
+  const todayKey = () => dateKey(new Date());
+  const shiftKey = (key, days) => {
+    const d = new Date(key + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    return dateKey(d);
+  };
+
+  /** currently viewed day in the Summary tab */
+  let VIEW = todayKey();
 
   /* ---------------- default food library (per 100 g/ml) ---------------- */
   const SEED_FOODS = [
@@ -79,7 +93,7 @@
   let S = load();
   function load() {
     try {
-      const raw = JSON.parse(localStorage.getItem(KEY));
+      const raw = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem(LEGACY_KEY));
       if (!raw) return defaults();
       const d = defaults();
       return {
@@ -91,28 +105,35 @@
     } catch (e) { return defaults(); }
   }
   const save = () => localStorage.setItem(KEY, JSON.stringify(S));
-  function day(k) { k = k || todayKey(); if (!S.days[k]) S.days[k] = blankDay(); return S.days[k]; }
+  function day(k) { k = k || VIEW; if (!S.days[k]) S.days[k] = blankDay(); return S.days[k]; }
 
   function toast(msg) {
     const t = $('toast'); t.textContent = msg; t.classList.add('show');
-    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2000);
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2200);
   }
 
   /* ---------------- calculations ---------------- */
   const kcalOf = (p, c, f) => p * 4 + c * 4 + f * 9;
 
+  /** latest recorded weight up to and including the given day */
+  function weightAsOf(key) {
+    const keys = Object.keys(S.days).filter(k => S.days[k].weight != null && k <= key).sort();
+    if (keys.length) return { kg: S.days[keys[keys.length - 1]].weight, date: keys[keys.length - 1] };
+    return latestWeight();
+  }
   function latestWeight() {
     const keys = Object.keys(S.days).filter(k => S.days[k].weight != null).sort();
     if (keys.length) return { kg: S.days[keys[keys.length - 1]].weight, date: keys[keys.length - 1] };
     return { kg: num(S.profile.startWeight, 70), date: null };
   }
 
-  function bmr() {
-    const p = S.profile, w = latestWeight().kg;
-    const base = 10 * w + 6.25 * num(p.height, 170) - 5 * num(p.age, 30);
+  function bmr(w) {
+    const p = S.profile;
+    const kg = w != null ? w : latestWeight().kg;
+    const base = 10 * kg + 6.25 * num(p.height, 170) - 5 * num(p.age, 30);
     return Math.max(0, p.sex === 'male' ? base + 5 : base - 161);
   }
-  const tdee = () => bmr() * num(S.profile.activity, 1.55);
+  const tdee = (w) => bmr(w) * num(S.profile.activity, 1.55);
 
   function goalCalc() {
     const cur = latestWeight().kg;
@@ -126,9 +147,9 @@
     const t0 = new Date(todayKey() + 'T00:00:00').getTime();
     const t1 = new Date(td + 'T00:00:00').getTime();
     const days = Math.max(1, Math.round((t1 - t0) / msDay));
-    const delta = cur - tw;                       // positive = need to lose
-    let rate = (delta / days) * 7;                // kg per week
-    let adjust = (delta * KCAL_PER_KG) / days;    // daily kcal adjustment
+    const delta = cur - tw;
+    const rate = (delta / days) * 7;
+    const adjust = (delta * KCAL_PER_KG) / days;
 
     if (Math.abs(rate) > 1) out.warn = 'This pace exceeds 1 kg per week. Consider extending the target date.';
     if (t1 <= t0) out.warn = 'Target date is today or in the past — pick a future date.';
@@ -136,8 +157,7 @@
     let target = maint - adjust;
     if (target < floor) { target = floor; out.warn = 'Target capped at the ' + floor + ' kcal safety floor — extend your date for a realistic plan.'; }
 
-    out.days = days; out.delta = delta; out.rate = rate;
-    out.adjust = adjust; out.target = target;
+    out.days = days; out.delta = delta; out.rate = rate; out.adjust = adjust; out.target = target;
     return out;
   }
 
@@ -151,7 +171,6 @@
 
   /* ---------------- natural language food parsing ---------------- */
   const norm = s => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-
   const WORD_NUM = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, half: 0.5 };
 
   function matchFood(text) {
@@ -178,7 +197,6 @@
     let s = raw.trim(); if (!s) return null;
     let qty = null, unit = null;
 
-    // "250 g rice", "250g rice", "2 servings oats", "300ml milk"
     let m = s.match(/(\d+(?:[.,]\d+)?)\s*(g|gram|grams|gr|ml|millilitre|milliliter|l|litre|liter|serving|servings|serve|serves|portion|portions|pc|pcs|piece|pieces|cup|cups)\b/i);
     if (m) {
       qty = parseFloat(m[1].replace(',', '.'));
@@ -193,38 +211,32 @@
       }
     }
 
-    s = s.replace(/^(of|de)\s+/i, '').replace(/\b(for|at|in the)\s+(breakfast|lunch|dinner|snack)\b/i, (x) => { parsePhrase._meal = RegExp.$2; return ''; }).trim();
+    s = s.replace(/^(of|de)\s+/i, '').replace(/\b(for|at|in the)\s+(breakfast|lunch|dinner|snack)\b/i, '').trim();
     const food = matchFood(s);
     if (!food) return { error: s || raw };
 
-    // resolve quantity to base grams/ml
     let grams, label;
     const servingSize = num(food.serving, 100) || 100;
     if (unit === null) {
-      if (qty === null) { qty = 1; }
+      if (qty === null) qty = 1;
       grams = qty * servingSize; label = qty + ' serving' + (qty === 1 ? '' : 's');
-    } else if (/^(g|gram|grams|gr)$/.test(unit)) {
-      grams = qty; label = qty + ' g';
-    } else if (/^(ml|millilitre|milliliter)$/.test(unit)) {
-      grams = qty; label = qty + ' ml';
-    } else if (/^(l|litre|liter)$/.test(unit)) {
-      grams = qty * 1000; label = qty + ' L';
-    } else if (/^cups?$/.test(unit)) {
-      grams = qty * 240; label = qty + ' cup' + (qty === 1 ? '' : 's');
-    } else {
-      grams = qty * servingSize; label = qty + ' serving' + (qty === 1 ? '' : 's');
-    }
+    } else if (/^(g|gram|grams|gr)$/.test(unit)) { grams = qty; label = qty + ' g'; }
+    else if (/^(ml|millilitre|milliliter)$/.test(unit)) { grams = qty; label = qty + ' ml'; }
+    else if (/^(l|litre|liter)$/.test(unit)) { grams = qty * 1000; label = qty + ' L'; }
+    else if (/^cups?$/.test(unit)) { grams = qty * 240; label = qty + ' cup' + (qty === 1 ? '' : 's'); }
+    else { grams = qty * servingSize; label = qty + ' serving' + (qty === 1 ? '' : 's'); }
     if (!isFinite(grams) || grams <= 0) return { error: raw };
 
     const r = grams / 100;
-    const entry = {
-      id: 'e' + Date.now() + Math.random().toString(36).slice(2, 6),
-      foodId: food.id, name: food.name, qtyLabel: label, grams: round(grams, 1),
-      protein: round(food.protein * r, 1), carb: round(food.carb * r, 1),
-      fat: round(food.fat * r, 1), fiber: round(food.fiber * r, 1),
-      kcal: round(kcalOf(food.protein * r, food.carb * r, food.fat * r), 0)
+    return {
+      entry: {
+        id: 'e' + Date.now() + Math.random().toString(36).slice(2, 6),
+        foodId: food.id, name: food.name, qtyLabel: label, grams: round(grams, 1),
+        protein: round(food.protein * r, 1), carb: round(food.carb * r, 1),
+        fat: round(food.fat * r, 1), fiber: round(food.fiber * r, 1),
+        kcal: round(kcalOf(food.protein * r, food.carb * r, food.fat * r), 0)
+      }
     };
-    return { entry };
   }
 
   function parseLine(text) {
@@ -234,13 +246,44 @@
     return { ok, bad };
   }
 
+  /* ---------------- date navigator ---------------- */
+  const fmtLong = k => new Date(k + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  const fmtShort = k => new Date(k + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+  function relLabel(k) {
+    const t = todayKey();
+    if (k === t) return 'Today';
+    if (k === shiftKey(t, -1)) return 'Yesterday';
+    if (k === shiftKey(t, 1)) return 'Tomorrow';
+    return new Date(k + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+
+  function setView(k) {
+    if (k > todayKey()) { toast('Future dates cannot be logged.'); return; }
+    VIEW = k;
+    renderSummary();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function renderDatebar() {
+    const isToday = VIEW === todayKey();
+    $('dLabel').textContent = relLabel(VIEW);
+    $('dSub').textContent = isToday ? 'Tap to choose a date' : fmtLong(VIEW);
+    $('dPick').value = VIEW;
+    $('dPick').max = todayKey();
+    $('dNext').classList.toggle('off', isToday);
+    $('dToday').hidden = isToday;
+    $('navDate').innerHTML = fmtLong(VIEW) + (isToday ? '' : ' <span class="past-flag">Editing past day</span>');
+    $('wLbl').textContent = isToday ? "Today's weight" : relLabel(VIEW) + ' weight';
+  }
+
   /* ---------------- rendering ---------------- */
   function renderSummary() {
-    const t = dayTotals(), g = goalCalc();
+    renderDatebar();
+    const t = dayTotals(VIEW), g = goalCalc();
     const diff = round(t.kcal - t.active - g.target, 0);
     const over = diff > 0;
 
-    $('navDate').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
     $('diffValue').textContent = (diff > 0 ? '+' : '') + diff;
     $('diffValue').className = 'hero-value ' + (over ? 'over' : 'lime');
     $('diffChip').textContent = over ? 'Above target' : 'On track';
@@ -255,9 +298,8 @@
     $('sumActive').textContent = round(t.active);
     $('sumTarget').textContent = round(g.target);
 
-    // macros — reference split 30/40/30 of target + 30 g fiber
     const refP = (g.target * 0.30) / 4, refC = (g.target * 0.40) / 4, refF = (g.target * 0.30) / 9, refFi = 30;
-    const set = (v, b, val, ref, suffix) => {
+    const set = (v, b, val, ref) => {
       $(v).textContent = round(val, 1) + 'g';
       $(b).style.width = Math.min(100, ref ? (val / ref) * 100 : 0) + '%';
     };
@@ -266,8 +308,7 @@
     set('mFat', 'bFat', t.fat, refF);
     set('mFiber', 'bFiber', t.fiber, refFi);
 
-    // food log
-    const d = day();
+    const d = day(VIEW);
     $('foodLog').innerHTML = d.foods.length ? d.foods.map(f => `
       <div class="item">
         <div class="ic">🍽️</div>
@@ -277,9 +318,8 @@
         </div>
         <div class="val">${f.kcal}</div>
         <div class="del" data-del-food="${f.id}">×</div>
-      </div>`).join('') : '<div class="empty">No food logged yet today.</div>';
+      </div>`).join('') : '<div class="empty">No food logged for ' + relLabel(VIEW).toLowerCase() + '.</div>';
 
-    // workouts
     $('actLog').innerHTML = d.workouts.length ? d.workouts.map(w => `
       <div class="item">
         <div class="ic act">🔥</div>
@@ -289,24 +329,27 @@
         </div>
         <div class="val">−${w.kcal}</div>
         <div class="del" data-del-act="${w.id}">×</div>
-      </div>`).join('') : '<div class="empty">No workouts logged yet today.</div>';
+      </div>`).join('') : '<div class="empty">No workouts logged for ' + relLabel(VIEW).toLowerCase() + '.</div>';
 
-    // water
     const wg = num(S.profile.waterGoal, 2000) || 2000;
     $('waterChip').textContent = round(d.water) + ' / ' + wg + ' ml';
     $('waterBar').style.width = Math.min(100, (d.water / wg) * 100) + '%';
 
-    // weight history
+    // weight history — no leading icon
     const wk = Object.keys(S.days).filter(k => S.days[k].weight != null).sort().reverse().slice(0, 7);
     $('weightLog').innerHTML = wk.length ? '<div class="card list">' + wk.map(k => `
-      <div class="item">
-        <div class="ic w">⚖️</div>
-        <div class="main"><div class="t1">${fmtDate(k)}</div><div class="t2">${k === todayKey() ? 'Today' : ''}</div></div>
+      <div class="item${k === VIEW ? ' sel' : ''}">
+        <div class="main">
+          <div class="t1">${fmtShort(k)}</div>
+          <div class="t2">${relLabel(k)}</div>
+        </div>
         <div class="val">${S.days[k].weight} kg</div>
+        <div class="del" data-del-w="${k}">×</div>
       </div>`).join('') + '</div>' : '<div class="empty">No weight recorded yet.</div>';
 
-    const lw = latestWeight();
-    $('wInput').placeholder = lw.kg ? String(lw.kg) : '70.0';
+    $('wInput').value = d.weight != null ? d.weight : '';
+    const wa = weightAsOf(VIEW);
+    $('wInput').placeholder = wa.kg ? String(wa.kg) : '70.0';
   }
 
   function renderGoal() {
@@ -321,7 +364,7 @@
       ? 'Set a target below to calculate automatically.'
       : 'Maintenance ' + round(g.maintenance) + ' kcal minus a ' + round(Math.abs(g.adjust)) + ' kcal daily adjustment.';
 
-    $('gCurrent').textContent = lw.kg + ' kg' + (lw.date ? ' · ' + fmtDate(lw.date) : ' · from profile');
+    $('gCurrent').textContent = lw.kg + ' kg' + (lw.date ? ' · ' + fmtShort(lw.date) : ' · from profile');
     $('gDelta').textContent = S.goal.targetWeight == null ? '—' : (g.delta > 0 ? '−' : '+') + round(Math.abs(g.delta), 1) + ' kg';
     $('gDays').textContent = S.goal.targetWeight == null ? '—' : g.days + ' days';
 
@@ -346,8 +389,7 @@
 
   function renderFoods(filter) {
     const q = norm(filter || '');
-    const list = S.foods.filter(f => !q || norm(f.name).includes(q))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const list = S.foods.filter(f => !q || norm(f.name).includes(q)).sort((a, b) => a.name.localeCompare(b.name));
     $('foodCount').textContent = S.foods.length;
     $('foodList').innerHTML = list.length ? list.map(f => `
       <div class="item">
@@ -364,13 +406,12 @@
   function renderSuggest() {
     const picks = S.foods.slice(0, 40).sort(() => 0.5 - Math.random()).slice(0, 4);
     $('nlSuggest').innerHTML = picks.map(f =>
-      `<span data-sug="${esc(f.serving + (f.unit) + ' ' + f.name)}">${esc(f.serving + f.unit + ' ' + f.name.split(',')[0])}</span>`).join('');
+      `<span data-sug="${esc(f.serving + f.unit + ' ' + f.name)}">${esc(f.serving + f.unit + ' ' + f.name.split(',')[0])}</span>`).join('');
   }
 
   function renderAll() { renderSummary(); renderGoal(); renderProfile(); renderFoods($('foodSearch').value); }
 
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const fmtDate = k => new Date(k + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
   /* ---------------- form binding ---------------- */
   function fillForms() {
@@ -380,6 +421,7 @@
     $('pAct').value = String(p.activity); $('pWater').value = p.waterGoal;
     $('gWeight').value = S.goal.targetWeight ?? '';
     $('gDate').value = S.goal.targetDate || '';
+    $('gDate').min = todayKey();
     $('actSelect').innerHTML = ACTIVITIES.map(([n, m]) => `<option value="${m}">${n}</option>`).join('');
   }
 
@@ -401,7 +443,6 @@
 
   /* ---------------- events ---------------- */
   function bind() {
-    // tabs
     document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
       document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
@@ -411,21 +452,38 @@
       renderAll();
     }));
 
-    // natural language food
+    /* date navigation */
+    $('dPrev').addEventListener('click', () => setView(shiftKey(VIEW, -1)));
+    $('dNext').addEventListener('click', () => setView(shiftKey(VIEW, 1)));
+    $('dPick').addEventListener('change', () => { if ($('dPick').value) setView($('dPick').value); });
+    $('dToday').addEventListener('click', () => setView(todayKey()));
+    // swipe left/right on the summary page to change day
+    let sx = 0, sy = 0;
+    const page = $('page-summary');
+    page.addEventListener('touchstart', e => { sx = e.changedTouches[0].clientX; sy = e.changedTouches[0].clientY; }, { passive: true });
+    page.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+      if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 2) setView(shiftKey(VIEW, dx < 0 ? 1 : -1));
+    }, { passive: true });
+
+    /* natural language food */
     const addFood = () => {
       const txt = $('nlInput').value.trim();
       if (!txt) { toast('Type what you ate first.'); return; }
       const { ok, bad } = parseLine(txt);
-      if (ok.length) { day().foods.push(...ok); save(); $('nlInput').value = ''; renderSummary(); }
+      if (ok.length) { day(VIEW).foods.push(...ok); save(); $('nlInput').value = ''; renderSummary(); }
       if (bad.length) toast('Not in your Food list: ' + bad.join(', '));
-      else if (ok.length) toast('Logged ' + ok.length + ' item' + (ok.length > 1 ? 's' : '') + '.');
+      else if (ok.length) toast('Logged ' + ok.length + ' item' + (ok.length > 1 ? 's' : '') + ' to ' + relLabel(VIEW).toLowerCase() + '.');
     };
     $('nlAdd').addEventListener('click', addFood);
-    $('nlClear').addEventListener('click', () => { $('nlInput').value = ''; $('nlHint').textContent = 'Natural language · quantity + unit (g / ml / serving) + food from your Food list.'; });
+    $('nlClear').addEventListener('click', () => { $('nlInput').value = ''; $('nlInput').dispatchEvent(new Event('input')); });
     $('nlInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addFood(); } });
     $('nlInput').addEventListener('input', () => {
       const v = $('nlInput').value.trim();
-      if (!v) { $('nlHint').textContent = 'Natural language · quantity + unit (g / ml / serving) + food from your Food list.'; return; }
+      if (!v) {
+        $('nlHint').textContent = 'Natural language · quantity + unit (g / ml / serving) + food from your Food list.';
+        $('nlHint').style.color = ''; return;
+      }
       const last = v.split(/,|;|\band\b|\+/i).pop().trim();
       const r = parsePhrase(last);
       $('nlHint').textContent = r && r.entry
@@ -440,23 +498,30 @@
       $('nlInput').dispatchEvent(new Event('input'));
     });
 
-    // workouts
+    /* workouts */
     $('actAdd').addEventListener('click', () => {
       const sel = $('actSelect'), min = num($('actMin').value);
       if (min <= 0) { toast('Enter workout minutes.'); return; }
-      const met = num(sel.value, 4), w = latestWeight().kg;
+      const met = num(sel.value, 4), w = weightAsOf(VIEW).kg;
       const manual = $('actKcal').value;
       const kcal = manual !== '' ? round(num(manual)) : round(met * 3.5 * w / 200 * min);
-      day().workouts.push({ id: 'w' + Date.now(), name: sel.options[sel.selectedIndex].text, minutes: min, kcal });
-      save(); $('actMin').value = ''; $('actKcal').value = ''; renderSummary(); toast('Workout logged · ' + kcal + ' kcal');
+      day(VIEW).workouts.push({ id: 'w' + Date.now(), name: sel.options[sel.selectedIndex].text, minutes: min, kcal });
+      save(); $('actMin').value = ''; $('actKcal').value = ''; renderSummary();
+      toast('Workout logged · ' + kcal + ' kcal');
     });
 
-    // delete handlers
+    /* deletes */
     document.addEventListener('click', e => {
       const df = e.target.closest('[data-del-food]');
-      if (df) { const d = day(); d.foods = d.foods.filter(f => f.id !== df.dataset.delFood); save(); renderSummary(); return; }
+      if (df) { const d = day(VIEW); d.foods = d.foods.filter(f => f.id !== df.dataset.delFood); save(); renderSummary(); return; }
       const da = e.target.closest('[data-del-act]');
-      if (da) { const d = day(); d.workouts = d.workouts.filter(w => w.id !== da.dataset.delAct); save(); renderSummary(); return; }
+      if (da) { const d = day(VIEW); d.workouts = d.workouts.filter(w => w.id !== da.dataset.delAct); save(); renderSummary(); return; }
+      const dw = e.target.closest('[data-del-w]');
+      if (dw) {
+        const k = dw.dataset.delW;
+        if (S.days[k]) S.days[k].weight = null;
+        save(); renderSummary(); renderGoal(); renderProfile(); toast('Weight entry removed.'); return;
+      }
       const dl = e.target.closest('[data-del-lib]');
       if (dl) {
         S.foods = S.foods.filter(f => f.id !== dl.dataset.delLib);
@@ -464,25 +529,25 @@
       }
     });
 
-    // water
+    /* water */
     $('waterQuick').addEventListener('click', e => {
       const s = e.target.closest('[data-ml]'); if (!s) return;
-      const d = day(); d.water = Math.max(0, num(d.water) + num(s.dataset.ml));
+      const d = day(VIEW); d.water = Math.max(0, num(d.water) + num(s.dataset.ml));
       save(); renderSummary();
     });
 
-    // weight
+    /* weight */
     $('wAdd').addEventListener('click', () => {
       const v = num($('wInput').value, 0);
       if (v <= 0) { toast('Enter a valid weight.'); return; }
-      day().weight = round(v, 1); save(); $('wInput').value = '';
-      renderSummary(); renderGoal(); renderProfile(); toast('Weight recorded — goal recalculated.');
+      day(VIEW).weight = round(v, 1); save();
+      renderSummary(); renderGoal(); renderProfile();
+      toast('Weight recorded for ' + relLabel(VIEW).toLowerCase() + '.');
     });
 
-    // food library
+    /* food library */
     $('foodSearch').addEventListener('input', () => renderFoods($('foodSearch').value));
-    const macroIds = ['fProtein', 'fCarb', 'fFat'];
-    macroIds.forEach(id => $(id).addEventListener('input', () => {
+    ['fProtein', 'fCarb', 'fFat'].forEach(id => $(id).addEventListener('input', () => {
       $('fKcal').textContent = round(kcalOf(num($('fProtein').value), num($('fCarb').value), num($('fFat').value))) + ' kcal / 100';
     }));
     $('fSave').addEventListener('click', () => {
@@ -498,29 +563,28 @@
       toast(name + ' added to your Food list.');
     });
     $('fReset').addEventListener('click', resetFoodForm);
-
-    // nutrition label capture
     $('labelPhoto').addEventListener('change', handleLabel);
 
-    // data tools
+    /* data tools */
     $('dExport').addEventListener('click', () => {
       const blob = new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = 'vitalis-data-' + todayKey() + '.json'; a.click();
+      a.href = URL.createObjectURL(blob); a.download = 'beautifyme-data-' + todayKey() + '.json'; a.click();
       URL.revokeObjectURL(a.href); toast('Data exported.');
     });
     $('dImport').addEventListener('change', e => {
       const f = e.target.files[0]; if (!f) return;
       const r = new FileReader();
       r.onload = () => {
-        try { localStorage.setItem(KEY, r.result); S = load(); fillForms(); renderAll(); renderSuggest(); toast('Data imported.'); }
+        try { localStorage.setItem(KEY, r.result); S = load(); VIEW = todayKey(); fillForms(); renderAll(); renderSuggest(); toast('Data imported.'); }
         catch (err) { toast('Invalid file.'); }
       };
       r.readAsText(f); e.target.value = '';
     });
     $('dReset').addEventListener('click', () => {
-      if (!confirm('Erase all Vitalis data on this device?')) return;
-      localStorage.removeItem(KEY); S = defaults(); fillForms(); renderAll(); renderSuggest(); toast('All data erased.');
+      if (!confirm('Erase all BeautifyMe data on this device?')) return;
+      localStorage.removeItem(KEY); localStorage.removeItem(LEGACY_KEY);
+      S = defaults(); VIEW = todayKey(); fillForms(); renderAll(); renderSuggest(); toast('All data erased.');
     });
   }
 
@@ -538,7 +602,7 @@
     $('ocrStatus').textContent = 'Reading label…';
     loadTesseract()
       .then(T => T.recognize(url, 'eng'))
-      .then(res => { applyLabelText(res.data.text); })
+      .then(res => applyLabelText(res.data.text))
       .catch(() => { $('ocrStatus').textContent = 'Could not read automatically — type the values from the photo above.'; })
       .finally(() => { e.target.value = ''; });
   }
@@ -574,7 +638,7 @@
     if (c) { $('fCarb').value = c; filled++; }
     if (f) { $('fFat').value = f; filled++; }
     if (fi) { $('fFiber').value = fi; filled++; }
-    if (sv) { $('fServing').value = sv; }
+    if (sv) $('fServing').value = sv;
     $('fKcal').textContent = round(kcalOf(num($('fProtein').value), num($('fCarb').value), num($('fFat').value))) + ' kcal / 100';
     $('ocrStatus').textContent = filled
       ? 'Found ' + filled + ' value' + (filled > 1 ? 's' : '') + ' — check them above, add a name, then save.'
@@ -583,8 +647,4 @@
 
   /* ---------------- init ---------------- */
   fillForms(); bind(); bindProfile(); renderSuggest(); renderAll();
-  if (!$('gDate').value) {
-    const d = new Date(); d.setMonth(d.getMonth() + 3);
-    $('gDate').min = todayKey();
-  }
 })();

@@ -36,6 +36,27 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
 .section-title{margin:22px 4px 8px;font-size:13px;font-weight:700;letter-spacing:.6px;
   text-transform:uppercase;color:var(--dim)}
 
+/* ---- date navigator ---- */
+.datebar{display:flex;align-items:center;gap:6px;background:var(--card);
+  border-radius:var(--r);padding:8px 6px;margin-bottom:8px}
+.d-arrow{flex:none;width:44px;height:44px;display:grid;place-items:center;font-size:30px;
+  line-height:1;font-weight:600;color:var(--lime);cursor:pointer;border-radius:12px;user-select:none}
+.d-arrow:active{background:var(--card2)}
+.d-arrow.off{color:var(--dim2);pointer-events:none}
+.d-center{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;
+  gap:1px;padding:4px 0;cursor:pointer;border-radius:12px}
+.d-center:active{background:var(--card2)}
+.d-main{font-size:17px;font-weight:700;letter-spacing:-.2px}
+.d-sub{font-size:12px;color:var(--dim2)}
+.d-center input[type=date]{position:absolute;inset:0;width:100%;height:100%;
+  opacity:0;cursor:pointer;appearance:none;border:0;background:transparent;color:transparent}
+.d-today{text-align:center;font-size:14px;font-weight:700;color:var(--blue);
+  padding:6px 0 4px;cursor:pointer;user-select:none}
+.d-today:active{opacity:.55}
+.past-flag{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.4px;
+  text-transform:uppercase;color:var(--orange);background:rgba(255,159,10,.16);
+  padding:3px 8px;border-radius:99px;margin-left:8px;vertical-align:middle}
+
 /* cards */
 .card{background:var(--card);border-radius:var(--r);padding:16px;margin-bottom:10px}
 .card.list{padding:4px 16px}
@@ -123,6 +144,7 @@ select.inp{background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%
 .item .val{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
 .item .del{color:var(--dim2);font-size:20px;padding:0 2px 0 8px;cursor:pointer;line-height:1}
 .item .del:active{color:var(--red)}
+.item.sel .t1{color:var(--lime)}
 .empty{padding:22px 0;text-align:center;color:var(--dim2);font-size:14px}
 
 .kv{display:flex;justify-content:space-between;align-items:center;gap:12px;

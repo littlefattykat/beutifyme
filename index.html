@@ -6,12 +6,12 @@
 <meta name="theme-color" content="#000000" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Vitalis" />
-<meta name="description" content="Vitalis — Apple Health style calorie, activity and weight tracker." />
-<title>Vitalis Health</title>
+<meta name="apple-mobile-web-app-title" content="BeautifyMe" />
+<meta name="description" content="BeautifyMe — Apple Health style calorie, activity and weight tracker." />
+<title>BeautifyMe</title>
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="apple-touch-icon" href="./assets/icon-180.png" />
-<link rel="icon" href="./assets/icon-180.png" />
+<link rel="icon" href="./assets/favicon-64.png" />
 <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -24,6 +24,18 @@
       <p class="nav-date" id="navDate">Today</p>
       <h1>Summary</h1>
     </header>
+
+    <!-- date navigator -->
+    <div class="datebar">
+      <span class="d-arrow" id="dPrev" aria-label="Previous day">‹</span>
+      <label class="d-center" for="dPick">
+        <span class="d-main" id="dLabel">Today</span>
+        <span class="d-sub" id="dSub">Tap to choose a date</span>
+        <input id="dPick" type="date" />
+      </label>
+      <span class="d-arrow" id="dNext" aria-label="Next day">›</span>
+    </div>
+    <div class="d-today" id="dToday" hidden>Back to today</div>
 
     <div class="card hero">
       <div class="hero-top">
@@ -90,7 +102,7 @@
     <h2 class="section-title">Weight</h2>
     <div class="card">
       <div class="two">
-        <div><label class="field-lbl" for="wInput">Today's weight (kg)</label><input id="wInput" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="70.5" /></div>
+        <div><label class="field-lbl" for="wInput"><span id="wLbl">Today's weight</span> (kg)</label><input id="wInput" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="70.5" /></div>
         <div class="align-end"><span class="text-action lime" id="wAdd">Record</span></div>
       </div>
       <div class="list tight" id="weightLog"></div>
