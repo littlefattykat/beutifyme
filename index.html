@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+<meta name="theme-color" content="#000000" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Vitalis" />
+<meta name="description" content="Vitalis — Apple Health style calorie, activity and weight tracker." />
+<title>Vitalis Health</title>
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="apple-touch-icon" href="./assets/icon-180.png" />
+<link rel="icon" href="./assets/icon-180.png" />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ SUMMARY ============ -->
+  <section class="page active" id="page-summary">
+    <header class="nav">
+      <p class="nav-date" id="navDate">Today</p>
+      <h1>Summary</h1>
+    </header>
+
+    <div class="card hero">
+      <div class="hero-top">
+        <span class="label">Calorie difference from target</span>
+        <span class="chip" id="diffChip">—</span>
+      </div>
+      <div class="hero-value" id="diffValue">0</div>
+      <p class="hero-sub" id="diffNote">Set your profile and goal to begin.</p>
+      <div class="bar"><div class="bar-fill" id="diffBar"></div></div>
+      <div class="hero-grid">
+        <div><span class="k" id="sumIntake">0</span><span class="t">Intake</span></div>
+        <div><span class="k" id="sumActive">0</span><span class="t">Active</span></div>
+        <div><span class="k" id="sumTarget">0</span><span class="t">Target</span></div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Nutrition</h2>
+    <div class="card">
+      <div class="macro-row">
+        <div class="macro"><span class="m-v" id="mProtein">0g</span><span class="m-l">Protein</span><div class="m-bar"><i id="bProtein"></i></div></div>
+        <div class="macro"><span class="m-v" id="mCarb">0g</span><span class="m-l">Carbs</span><div class="m-bar carb"><i id="bCarb"></i></div></div>
+        <div class="macro"><span class="m-v" id="mFat">0g</span><span class="m-l">Fat</span><div class="m-bar fat"><i id="bFat"></i></div></div>
+        <div class="macro"><span class="m-v" id="mFiber">0g</span><span class="m-l">Fiber</span><div class="m-bar fiber"><i id="bFiber"></i></div></div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Food intake</h2>
+    <div class="card">
+      <label class="field-lbl" for="nlInput">Describe what you ate</label>
+      <input id="nlInput" class="nl" type="text" autocomplete="off"
+             placeholder="200g chicken breast, 1 serving oats, 300ml milk" />
+      <p class="hint" id="nlHint">Natural language · quantity + unit (g / ml / serving) + food from your Food list.</p>
+      <div class="suggest" id="nlSuggest"></div>
+      <div class="row-actions">
+        <span class="text-action lime" id="nlAdd">Add to log</span>
+        <span class="text-action dim" id="nlClear">Clear</span>
+      </div>
+    </div>
+    <div class="card list" id="foodLog"></div>
+
+    <h2 class="section-title">Activity</h2>
+    <div class="card">
+      <label class="field-lbl" for="actSelect">Workout</label>
+      <select id="actSelect" class="inp"></select>
+      <div class="two">
+        <div><label class="field-lbl" for="actMin">Minutes</label><input id="actMin" class="inp" type="number" inputmode="numeric" placeholder="30" /></div>
+        <div><label class="field-lbl" for="actKcal">Active kcal</label><input id="actKcal" class="inp" type="number" inputmode="numeric" placeholder="auto" /></div>
+      </div>
+      <p class="hint">Leave kcal blank to auto-estimate from MET × body weight × time.</p>
+      <div class="row-actions"><span class="text-action lime" id="actAdd">Add workout</span></div>
+    </div>
+    <div class="card list" id="actLog"></div>
+
+    <h2 class="section-title">Water</h2>
+    <div class="card">
+      <div class="hero-top"><span class="label">Hydration</span><span class="chip water" id="waterChip">0 ml</span></div>
+      <div class="bar"><div class="bar-fill water" id="waterBar"></div></div>
+      <div class="quick" id="waterQuick">
+        <span data-ml="250">+250 ml</span><span data-ml="500">+500 ml</span>
+        <span data-ml="750">+750 ml</span><span data-ml="-250">−250 ml</span>
+      </div>
+    </div>
+
+    <h2 class="section-title">Weight</h2>
+    <div class="card">
+      <div class="two">
+        <div><label class="field-lbl" for="wInput">Today's weight (kg)</label><input id="wInput" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="70.5" /></div>
+        <div class="align-end"><span class="text-action lime" id="wAdd">Record</span></div>
+      </div>
+      <div class="list tight" id="weightLog"></div>
+    </div>
+    <div class="spacer"></div>
+  </section>
+
+  <!-- ============ GOAL ============ -->
+  <section class="page" id="page-goal">
+    <header class="nav"><p class="nav-date">Plan</p><h1>Goal</h1></header>
+
+    <div class="card hero">
+      <div class="hero-top"><span class="label">Daily calorie target</span><span class="chip" id="goalChip">—</span></div>
+      <div class="hero-value lime" id="goalKcal">0</div>
+      <p class="hero-sub" id="goalNote">Maintenance minus your required daily deficit.</p>
+      <div class="hero-grid">
+        <div><span class="k" id="goalTdee">0</span><span class="t">Maintenance</span></div>
+        <div><span class="k" id="goalAdj">0</span><span class="t">Adjustment</span></div>
+        <div><span class="k" id="goalRate">0</span><span class="t">kg / week</span></div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Target</h2>
+    <div class="card">
+      <div class="two">
+        <div><label class="field-lbl" for="gWeight">Target weight (kg)</label><input id="gWeight" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="65" /></div>
+        <div><label class="field-lbl" for="gDate">Target date</label><input id="gDate" class="inp" type="date" /></div>
+      </div>
+      <div class="kv"><span>Current weight</span><b id="gCurrent">—</b></div>
+      <div class="kv"><span>Change required</span><b id="gDelta">—</b></div>
+      <div class="kv"><span>Days remaining</span><b id="gDays">—</b></div>
+      <div class="kv"><span>Progress to target</span><b id="gProgress">—</b></div>
+      <div class="bar"><div class="bar-fill" id="gBar"></div></div>
+      <p class="hint" id="gWarn"></p>
+    </div>
+
+    <h2 class="section-title">Pace safeguard</h2>
+    <div class="card">
+      <p class="hint">Targets are floored at 1,200 kcal (female) / 1,500 kcal (male) and capped at a 1 kg per week rate, in line with common clinical guidance. Adjust your target date if a warning appears.</p>
+    </div>
+    <div class="spacer"></div>
+  </section>
+
+  <!-- ============ FOOD LIST ============ -->
+  <section class="page" id="page-food">
+    <header class="nav"><p class="nav-date">Library</p><h1>Food List</h1></header>
+
+    <div class="card">
+      <input id="foodSearch" class="nl" type="search" placeholder="Search your food library" />
+    </div>
+
+    <h2 class="section-title"><span id="foodCount">0</span> items · per 100 g/ml</h2>
+    <div class="card list" id="foodList"></div>
+
+    <h2 class="section-title">Add food</h2>
+    <div class="card" id="addFoodCard">
+      <label class="field-lbl" for="fName">Name</label>
+      <input id="fName" class="inp" type="text" placeholder="Greek yogurt" />
+      <div class="two">
+        <div><label class="field-lbl" for="fProtein">Protein (g)</label><input id="fProtein" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="10" /></div>
+        <div><label class="field-lbl" for="fCarb">Carbs (g)</label><input id="fCarb" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="4" /></div>
+      </div>
+      <div class="two">
+        <div><label class="field-lbl" for="fFat">Fat (g)</label><input id="fFat" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="3" /></div>
+        <div><label class="field-lbl" for="fFiber">Fiber (g)</label><input id="fFiber" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="0" /></div>
+      </div>
+      <div class="two">
+        <div><label class="field-lbl" for="fServing">1 serving = (g/ml)</label><input id="fServing" class="inp" type="number" inputmode="numeric" placeholder="150" /></div>
+        <div><label class="field-lbl" for="fUnit">Base unit</label>
+          <select id="fUnit" class="inp"><option value="g">g</option><option value="ml">ml</option></select>
+        </div>
+      </div>
+      <div class="kv"><span>Energy (auto)</span><b id="fKcal">0 kcal / 100</b></div>
+      <div class="row-actions">
+        <span class="text-action lime" id="fSave">Save food</span>
+        <span class="text-action dim" id="fReset">Reset</span>
+      </div>
+    </div>
+
+    <h2 class="section-title">Capture nutrition label</h2>
+    <div class="card">
+      <label class="capture" for="labelPhoto">
+        <span class="cap-title">Scan label photo</span>
+        <span class="cap-sub">Reads Protein · Fat · Carbs · Fiber and fills the form above</span>
+      </label>
+      <input id="labelPhoto" type="file" accept="image/*" capture="environment" hidden />
+      <div id="ocrBox" class="ocr" hidden>
+        <img id="ocrImg" alt="Captured nutrition label" />
+        <p class="hint" id="ocrStatus">Reading label…</p>
+      </div>
+      <p class="hint">Scanning runs fully on-device. Always verify the values before saving.</p>
+    </div>
+    <div class="spacer"></div>
+  </section>
+
+  <!-- ============ PROFILE ============ -->
+  <section class="page" id="page-profile">
+    <header class="nav"><p class="nav-date">You</p><h1>Profile</h1></header>
+
+    <div class="card hero">
+      <div class="hero-top"><span class="label">Maintenance energy</span><span class="chip" id="pChip">TDEE</span></div>
+      <div class="hero-value" id="pTdee">0</div>
+      <p class="hero-sub" id="pFormula">Mifflin-St Jeor × activity factor</p>
+      <div class="hero-grid">
+        <div><span class="k" id="pBmr">0</span><span class="t">BMR</span></div>
+        <div><span class="k" id="pBmi">0</span><span class="t">BMI</span></div>
+        <div><span class="k" id="pWeight">0</span><span class="t">Weight</span></div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Personal data</h2>
+    <div class="card">
+      <label class="field-lbl" for="pName">Name</label>
+      <input id="pName" class="inp" type="text" placeholder="Your name" />
+      <div class="two">
+        <div><label class="field-lbl" for="pSex">Sex</label>
+          <select id="pSex" class="inp"><option value="female">Female</option><option value="male">Male</option></select></div>
+        <div><label class="field-lbl" for="pAge">Age</label><input id="pAge" class="inp" type="number" inputmode="numeric" placeholder="35" /></div>
+      </div>
+      <div class="two">
+        <div><label class="field-lbl" for="pHeight">Height (cm)</label><input id="pHeight" class="inp" type="number" inputmode="numeric" placeholder="170" /></div>
+        <div><label class="field-lbl" for="pStart">Starting weight (kg)</label><input id="pStart" class="inp" type="number" step="0.1" inputmode="decimal" placeholder="90" /></div>
+      </div>
+      <label class="field-lbl" for="pAct">Activity level</label>
+      <select id="pAct" class="inp">
+        <option value="1.2">Sedentary — desk work</option>
+        <option value="1.375">Light — 1–3 sessions / week</option>
+        <option value="1.55" selected>Moderate — 3–5 sessions / week</option>
+        <option value="1.725">Active — 6–7 sessions / week</option>
+        <option value="1.9">Very active — physical job</option>
+      </select>
+      <label class="field-lbl" for="pWater">Daily water goal (ml)</label>
+      <input id="pWater" class="inp" type="number" inputmode="numeric" placeholder="2000" />
+      <p class="hint">Everything is saved on this device only. Nothing is uploaded.</p>
+    </div>
+
+    <h2 class="section-title">Data</h2>
+    <div class="card">
+      <div class="row-actions col">
+        <span class="text-action" id="dExport">Export data (JSON)</span>
+        <label class="text-action" for="dImport">Import data</label>
+        <input id="dImport" type="file" accept="application/json" hidden />
+        <span class="text-action danger" id="dReset">Erase all data</span>
+      </div>
+    </div>
+    <div class="spacer"></div>
+  </section>
+
+  <!-- ============ TAB BAR ============ -->
+  <nav class="tabbar">
+    <a data-tab="summary" class="tab active">
+      <svg viewBox="0 0 24 24"><path d="M3 13h4l2.5 6 4-14L16 13h5"/></svg><span>Summary</span></a>
+    <a data-tab="goal" class="tab">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg><span>Goal</span></a>
+    <a data-tab="food" class="tab">
+      <svg viewBox="0 0 24 24"><path d="M6 3v8a3 3 0 0 0 6 0V3M9 11v10M17 3c-1.5 2-2 4-2 6s.5 3 2 3 2-1 2-3-.5-4-2-6zM17 12v9"/></svg><span>Food</span></a>
+    <a data-tab="profile" class="tab">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg><span>Profile</span></a>
+  </nav>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="./app.js"></script>
+</body>
+</html>
